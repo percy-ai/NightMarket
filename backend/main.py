@@ -1,6 +1,4 @@
 from flask import Flask, request, jsonify, send_from_directory
-from models.hok_translation import HokTranslation
-from models.hok_tts import HokTTS
 from database.hok_db import Hok_DB
 from managers.dialogue_manager import Dialogue_Manager
 from managers.vendor_manager import Vendor_Manager
@@ -17,18 +15,25 @@ class App:
         self.challenge_manager = None
         self.app = None
 
-    def run(self):
+    def run(self, host="0.0.0.0", port=8000, debug=False):
         self.create_app()
         self.create_endpoints()
+        self.app.run(host=host, port=port, debug=debug)
 
     def create_app(self):
         self.dialogue_manager = Dialogue_Manager(self.mode)
         self.vendor_manager = Vendor_Manager(self.mode)
         self.challenge_manager = Challenge_Manager(self.mode)
-        self.hokTTS = HokTTS()
-        self.hokTranslation = HokTranslation()
             
         self.app = Flask(import_name="Hokkien Game")
+
+        @self.app.after_request
+        def add_cors_headers(response):
+            # Allow browser-based clients (e.g., Unity WebGL) to call this API cross-origin.
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            return response
 
     def create_endpoints(self):
         print("\nStarting Flask app...")
@@ -763,8 +768,6 @@ class App:
             result = self.dialogue_manager.update_dialogue(node_id, dialogue[0][2], dialogue[0][3], audio_src or "")
             return jsonify({"status": "success", "data": result}), 200
 
-        self.app.run(host="0.0.0.0", port=8000, debug=False)
-
 def select_launch_mode():
     prompt = '''
 Select launch mode...
@@ -785,6 +788,11 @@ Select launch mode...
             raise Exception("Error, mode selected is invalid.") 
 
 if __name__ == "__main__":
-    mode = select_launch_mode()
-    app = App(mode)
-    app.run()
+    # Cloud hosts (like Railway) provide PORT and cannot handle interactive input.
+    port = int(os.environ.get("PORT", 8000))
+
+    # Force lesson mode in cloud; keep local interactive launcher for development.
+    mode = 2 if "PORT" in os.environ else select_launch_mode()
+
+    app_instance = App(mode)
+    app_instance.run(host="0.0.0.0", port=port, debug=False)
